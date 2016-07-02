@@ -88,7 +88,7 @@ class Download(threading.Thread):
                 if href_result.scheme != '':
                     return href_result.geturl()
                 elif href_result.netloc != '':
-                    return parse_result.scheme + "://" + href_result.geturl()
+                    return parse_result.scheme + "://" + href_result.geturl().replace('//', '')
                 else:
                     return parse_result.scheme + "://" + parse_result.netloc + href_result.geturl()
 
@@ -129,5 +129,5 @@ class Spider(object):
 
 
 if __name__ == '__main__':
-    download = Download("http://www.baidu.com", None)
+    download = Download("http://www.baidu.com/", None)
     download.start()
