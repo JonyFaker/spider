@@ -91,3 +91,4 @@ ENV/
 /.idea/
 /tmp/
 /app_test/
+/app_test.py
