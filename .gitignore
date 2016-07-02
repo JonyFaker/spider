@@ -89,3 +89,5 @@ ENV/
 .ropeproject
 将删除 .idea/
 /.idea/
+/tmp/
+/app_test/

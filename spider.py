@@ -62,11 +62,13 @@ class Node(object):
     def __str__(self):
         return str(self.sub_node)
 
+
 class Task(object):
     def __init__(self, type, url=None):
         self.type = type
         self.url = url
         self.result = None
+
 
 class Download(threading.Thread):
     def __init__(self, url, spider):
@@ -90,9 +92,9 @@ class Download(threading.Thread):
                 else:
                     return parse_result.scheme + "://" + parse_result.netloc + href_result.geturl()
 
-            if self.spider != None:
-                for url in [convert(a['href']) for a in soup.select('a') if a['href'] != 'javascript:;']
-                    task = new Task("parse", url)
+            if self.spider is not None:
+                for url in [convert(a['href']) for a in soup.select('a') if a['href'] != 'javascript:;']:
+                    task = Task("parse", url)
                     task.result = r.text
                     self.spider.task_queue(task)
 
@@ -108,9 +110,12 @@ class Spider(object):
 
         def _deco(func):
             self.r.add(url, func)
+
             def __deco(*args, **kwargs):
                 func(*args, **kwargs)
+
             return __deco
+
         return _deco
 
     def run(self):
