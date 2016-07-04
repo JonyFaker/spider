@@ -1,9 +1,13 @@
 import queue
+import collections
 import threading
 import requests
+import re
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 
+int_number = re.compile('^[+,1]{0,1}\d+')
+float_number = re.compile('^[+,-]{0,1}\d+.{0,1}\d+$')
 
 class Route(object):
     def __init__(self):
@@ -14,7 +18,6 @@ class Route(object):
 
         parse_result = urlparse(url)
         urls = [url for url in parse_result.path.split('/') if url]
-        print(urls)
         if len(urls) == 0:
             node.func = func
         else:
@@ -32,19 +35,34 @@ class Route(object):
 
     def search(self, url):
         node = self.root
+        args = {}
 
-        parse_result = urlparse(url)
-        urls = parse_result.path[1:].split('/')
+        urls = urlparse(url).path[1:].split('/')
+
+        pattern_dict = collections.OrderedDict([
+            ('int', '^<int:([a-zA-Z_]\w+)>$'),
+            ('string', '^<string:([a-zA-Z_]\w+)>$'),
+            ('float', '^<float:([a-zA-Z_]\w+)>$')
+        ])
+
         i = 0
         while len(node.sub_node) > 0:
             if i == len(urls):
                 break
 
-            if urls[i] in node.sub_node:
-                node = node.sub_node[urls[i]]
-
+            sub_url = urls[i]
             i += 1
-        return node.func
+
+            if sub_url in node.sub_node:
+                node = node.sub_node[sub_url]
+                continue
+
+            
+
+        if node is None:
+            return None
+        else:
+            return node.func
 
     def __str__(self):
         return str(self.root.sub_node)
@@ -60,7 +78,7 @@ class Node(object):
         self.sub_node[node.name] = node
 
     def __str__(self):
-        return str(self.sub_node)
+        return self.name + ' ' + str(self.sub_node)
 
 
 class Task(object):
@@ -103,10 +121,9 @@ class Spider(object):
     def __init__(self, start_url):
         self.r = Route()
         self.task_queue = queue.Queue()
-        self.url_queue.put(Task('download', start_url))
+        self.task_queue.put(Task('download', start_url))
 
     def route(self, url):
-        print(url)
 
         def _deco(func):
             self.r.add(url, func)
@@ -125,9 +142,16 @@ class Spider(object):
             if task.type == 'download':
                 Download(task.url, self).start()
             elif task.type == 'parse':
-                self.r.search(task.url)()
-spider = Spider()
+                func = self.r.search(task.url)
+                if func is not None:
+                    func()
+spider = Spider('')
+
+@spider.route('/abc/<int:id>')
+def test():
+    print(test)
 
 if __name__ == '__main__':
-    download = Download("http://www.baidu.com/", None)
-    download.start()
+    spider.r.search('/abc/123')()
+    print()
+    spider.r.search('/abc/def')()
