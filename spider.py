@@ -126,7 +126,7 @@ class Spider(object):
                 Download(task.url, self).start()
             elif task.type == 'parse':
                 self.r.search(task.url)()
-
+spider = Spider()
 
 if __name__ == '__main__':
     download = Download("http://www.baidu.com/", None)
