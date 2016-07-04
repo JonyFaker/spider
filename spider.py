@@ -39,8 +39,10 @@ class Route(object):
     def search(self, url):
         node = self.root
         args = {}
-
+        if type(url) != type(''):
+            return None, args
         urls = urlparse(url).path[1:].split('/')
+
 
         i = 0
         while len(node.sub_node) > 0 and len(urls) > i:
@@ -111,7 +113,6 @@ class Download(threading.Thread):
         self.task = task
 
     def run(self):
-        print(self.task.url)
         r = requests.get(self.task.url)
         if r.status_code == 200:
             parse_result = urlparse(r.url)
@@ -128,10 +129,14 @@ class Download(threading.Thread):
                     return parse_result.scheme + "://" + parse_result.netloc + href_result.geturl()
 
             if self.task.spider is not None:
-                for url in [convert(a['href']) for a in soup.select('a') if a['href'] != 'javascript:;']:
+                for a in soup.select('a'):
+                    href = a.get('href')
+                    if href == 'javascript:;':
+                        continue
+                    url = convert(href)
                     task = Task("parse", url)
                     task.result = r
-                    self.task.spider.task_queue(task)
+                    self.task.spider.task_queue.put(task)
 
 
 class Request(object):
@@ -152,7 +157,7 @@ class Parser(threading.Thread):
         self.task = task
 
     def run(self):
-        self.task.func(**self.args)
+        self.task.func(**self.task.args)
 
 class Task(object):
     def __init__(self, type, url=None):
