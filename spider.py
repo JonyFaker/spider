@@ -50,14 +50,20 @@ class Route(object):
             for item in node.sub_node.values():
                 if item == sub_url:
                     node = item
+                    if item.param_type == 'int':
+                        args[item.param_name] = int(sub_url)
+                    elif item.param_type == 'string':
+                        args[item.param_name] = sub_url
+                    elif item.param_type == 'float':
+                        args[item.param_name] = float(sub_url)
                     break
             else:
                 node = None
                 break
         if node is None or i < len(urls):
-            return None
+            return None, args
         else:
-            return node.func
+            return node.func, args
 
     def __str__(self):
         return str(self.root.sub_node)
@@ -76,6 +82,8 @@ class Node(object):
         if result:
             self.param_type = result.group(1)
             self.param_name = result.group(2)
+        else:
+            self.param_type = 'base'
 
     def add(self, node):
         self.sub_node[node.name] = node
@@ -83,8 +91,9 @@ class Node(object):
     def __str__(self):
         return '[' + self.name + ' ' + str(self.sub_node) + ']'
 
+
     def __eq__(self, other):
-        if not hasattr(self, 'param_type'):
+        if self.param_type == 'base':
             return other == self.name
         elif self.param_type == 'string':
             return True
@@ -96,21 +105,14 @@ class Node(object):
             return False
 
 
-class Task(object):
-    def __init__(self, type, url=None):
-        self.type = type
-        self.url = url
-        self.result = None
-
-
 class Download(threading.Thread):
-    def __init__(self, url, spider):
+    def __init__(self, task):
         super().__init__()
-        self.url = url
-        self.spider = spider
+        self.task = task
 
     def run(self):
-        r = requests.get(self.url)
+        print(self.task.url)
+        r = requests.get(self.task.url)
         if r.status_code == 200:
             parse_result = urlparse(r.url)
             soup = BeautifulSoup(r.text, "lxml")
@@ -125,11 +127,41 @@ class Download(threading.Thread):
                 else:
                     return parse_result.scheme + "://" + parse_result.netloc + href_result.geturl()
 
-            if self.spider is not None:
+            if self.task.spider is not None:
                 for url in [convert(a['href']) for a in soup.select('a') if a['href'] != 'javascript:;']:
                     task = Task("parse", url)
-                    task.result = r.text
-                    self.spider.task_queue(task)
+                    task.result = r
+                    self.task.spider.task_queue(task)
+
+
+class Request(object):
+    def __init__(self):
+        self.req = {}
+
+    def get_request(self):
+        return self.req[threading.current_thread().ident]
+
+    def add_request(self, pid, req):
+        self.req[pid] = req
+
+request = Request()
+
+class Parser(threading.Thread):
+    def __init__(self, task):
+        super().__init__()
+        self.task = task
+
+    def run(self):
+        self.task.func(**self.args)
+
+class Task(object):
+    def __init__(self, type, url=None):
+        self.type = type
+        self.url = url
+        self.result = None
+        self.func = None
+        self.args = None
+        self.spider = None
 
 
 class Spider(object):
@@ -148,22 +180,25 @@ class Spider(object):
             task = self.task_queue.get()
 
             if task.type == 'download':
-                Download(task.url, self).start()
+                task.spider = self
+                Download(task).start()
             elif task.type == 'parse':
-                func = self.r.search(task.url)
+                func, args = self.r.search(task.url)
                 if func is not None:
-                    func()
+                    task.func = func
+                    task.args = args
+                    p = Parser(task)
+                    request.add_request(p.ident, task.result)
+                    p.start()
 
 
-spider = Spider('')
+spider = Spider('http://www.csdn.net/')
 
 
-@spider.route('/abc/<int:id>')
-def test():
-    print('test')
-
+@spider.route('/news/detail/<int:id>')
+def test(id):
+    result = request.get_request()
+    print(result)
 
 if __name__ == '__main__':
-    func = spider.r.search('/abc/123')
-    if func:
-        func()
+    spider.run()
