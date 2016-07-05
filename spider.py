@@ -171,7 +171,6 @@ class Worker(threading.Thread):
                 self.spider.redis.set(sub_url, False)
 
             # todo 调用相关的网页处理函数，标记该网页已经被爬过
-            print(url)
             func, args = self.spider.r.get_func(url)
             if func is None:
                 continue
@@ -235,7 +234,6 @@ spider = Spider('http://haha.sogou.com')
 
 @spider.route('/<int:id>')
 def test(id):
-    print(threading.get_ident())
     result = request.get_request()
     soup = BeautifulSoup(result.text)
     print(id, soup.find_all('h2', 'browser_title'))
