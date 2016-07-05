@@ -171,9 +171,11 @@ class Worker(threading.Thread):
                 self.spider.redis.set(sub_url, False)
 
             # todo 调用相关的网页处理函数，标记该网页已经被爬过
+            print(url)
             func, args = self.spider.r.get_func(url)
             if func is None:
                 continue
+
             request.add_request(threading.get_ident(), r)
             func(**args)
 
@@ -195,6 +197,16 @@ class Task(object):
         self.url = url
 
 
+class Config(object):
+    def __init__(self):
+        self.config = {
+            'worker': 5
+        }
+
+    def get(self, key):
+        return self.config.get(key)
+
+
 class Spider(object):
     def __init__(self, start_url):
         self.r = Route()
@@ -203,8 +215,9 @@ class Spider(object):
 
         task = Task(start_url)
         self.redis.lpush('task_queue', pickle.dumps(task))
-
         self.redis.set(start_url, False)
+
+        self.config = Config()
 
 
     def route(self, url):
@@ -213,17 +226,19 @@ class Spider(object):
         return _deco
 
     def run(self):
-        Worker(self).start()
+        for i in range(self.config.get('worker')):
+            Worker(self).start()
 
 
-spider = Spider('http://www.csdn.net/')
+spider = Spider('http://haha.sogou.com')
 
 
-@spider.route('/news/detail/<int:id>')
+@spider.route('/<int:id>')
 def test(id):
+    print(threading.get_ident())
     result = request.get_request()
     soup = BeautifulSoup(result.text)
-    print(soup.title)
+    print(soup.find_all('h2')[0])
 
 
 if __name__ == '__main__':
