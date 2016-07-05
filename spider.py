@@ -3,6 +3,8 @@ import collections
 import threading
 import requests
 import re
+import redis
+import pickle
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
 
@@ -107,38 +109,6 @@ class Node(object):
             return False
 
 
-class Download(threading.Thread):
-    def __init__(self, task):
-        super().__init__()
-        self.task = task
-
-    def run(self):
-        r = requests.get(self.task.url)
-        if r.status_code == 200:
-            parse_result = urlparse(r.url)
-            soup = BeautifulSoup(r.text, "lxml")
-
-            def convert(href):
-                href_result = urlparse(href)
-
-                if href_result.scheme != '':
-                    return href_result.geturl()
-                elif href_result.netloc != '':
-                    return parse_result.scheme + "://" + href_result.geturl().replace('//', '')
-                else:
-                    return parse_result.scheme + "://" + parse_result.netloc + href_result.geturl()
-
-            if self.task.spider is not None:
-                for a in soup.select('a'):
-                    href = a.get('href')
-                    if href == 'javascript:;':
-                        continue
-                    url = convert(href)
-                    task = Task("parse", url)
-                    task.result = r
-                    self.task.spider.task_queue.put(task)
-
-
 class Request(object):
     def __init__(self):
         self.req = {}
@@ -151,29 +121,80 @@ class Request(object):
 
 request = Request()
 
-class Parser(threading.Thread):
-    def __init__(self, task):
+
+class Worker(threading.Thread):
+    def __init__(self, spider):
         super().__init__()
-        self.task = task
+        self.spider = spider
 
     def run(self):
-        self.task.func(**self.task.args)
+        while True:
+            if self.spider is None:
+                # 记得错误处理
+                return
+
+            tmp = self.spider.redis.rpop('task_queue')
+            if tmp is None:
+                continue
+            task = pickle.loads(tmp)
+            url = task.url
+
+            print(url)
+            r = requests.get(url)
+            if r.status_code != 200:
+                pass
+
+            soup = BeautifulSoup(r.text, "lxml")
+            for a in soup.select('a'):
+                href = a.get('href')
+                sub_url = self.convert(href, url)
+                if type(sub_url) != type('') or not sub_url.startswith('http'):
+                    continue
+
+                # 暂时放弃https的页面
+                if sub_url.startswith('https'):
+                    continue
+                print(sub_url)
+
+                sub_task = Task(sub_url)
+
+                # 这个地方还需要修改，去除不必要的url
+                if self.spider.redis.exists(sub_url) and not self.spider.redis.get(sub_url):
+                    continue
+                self.spider.redis.lpush('task_queue', pickle.dumps(sub_task))
+                self.spider.redis.set(sub_url, False)
+
+            # todo 调用相关的网页处理函数，标记该网页已经被爬过
+
+    def convert(self, href, url):
+        parse_result = urlparse(url)
+        href_result = urlparse(href)
+
+        if href_result.scheme != '':
+            return href_result.geturl()
+        elif href_result.netloc != '':
+            return parse_result.scheme + "://" + href_result.geturl().replace('//', '')
+        else:
+            return parse_result.scheme + "://" + parse_result.netloc + href_result.geturl()
+
 
 class Task(object):
-    def __init__(self, type, url=None):
+    def __init__(self, url, type=None):
         self.type = type
         self.url = url
-        self.result = None
-        self.func = None
-        self.args = None
-        self.spider = None
 
 
 class Spider(object):
     def __init__(self, start_url):
         self.r = Route()
-        self.task_queue = queue.Queue()
-        self.task_queue.put(Task('download', start_url))
+        self.redis = redis.Redis(host='localhost', port=6379, db=0)
+        self.redis.flushall()
+
+        task = Task(start_url)
+        self.redis.lpush('task_queue', pickle.dumps(task))
+
+        self.redis.set(start_url, False)
+
 
     def route(self, url):
         def _deco(func):
@@ -181,20 +202,7 @@ class Spider(object):
         return _deco
 
     def run(self):
-        while True:
-            task = self.task_queue.get()
-
-            if task.type == 'download':
-                task.spider = self
-                Download(task).start()
-            elif task.type == 'parse':
-                func, args = self.r.search(task.url)
-                if func is not None:
-                    task.func = func
-                    task.args = args
-                    p = Parser(task)
-                    request.add_request(p.ident, task.result)
-                    p.start()
+        Worker(self).start()
 
 
 spider = Spider('http://www.csdn.net/')
