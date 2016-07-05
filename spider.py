@@ -236,7 +236,7 @@ spider = Spider('http://haha.sogou.com')
 def test(id):
     result = request.get_request()
     soup = BeautifulSoup(result.text)
-    print(id, soup.find_all('h2', 'browser_title'))
+    print(id, soup.find_all('h2', class_='browser_title'))
 
 
 if __name__ == '__main__':
