@@ -238,7 +238,7 @@ def test(id):
     print(threading.get_ident())
     result = request.get_request()
     soup = BeautifulSoup(result.text)
-    print(soup.find_all('h2', 'browser_title'))
+    print(id, soup.find_all('h2', 'browser_title'))
 
 
 if __name__ == '__main__':
