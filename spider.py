@@ -38,13 +38,12 @@ class Route(object):
         else:
             node.sub_node[key].func = func
 
-    def search(self, url):
+    def get_func(self, url):
         node = self.root
         args = {}
         if type(url) != type(''):
             return None, args
         urls = urlparse(url).path[1:].split('/')
-
 
         i = 0
         while len(node.sub_node) > 0 and len(urls) > i:
@@ -68,6 +67,13 @@ class Route(object):
             return None, args
         else:
             return node.func, args
+
+    def search(self, url):
+        func, args = self.get_func(url)
+        if func is None:
+            return False
+        else:
+            return True
 
     def __str__(self):
         return str(self.root.sub_node)
@@ -139,7 +145,6 @@ class Worker(threading.Thread):
             task = pickle.loads(tmp)
             url = task.url
 
-            print(url)
             r = requests.get(url)
             if r.status_code != 200:
                 pass
@@ -154,17 +159,23 @@ class Worker(threading.Thread):
                 # 暂时放弃https的页面
                 if sub_url.startswith('https'):
                     continue
-                print(sub_url)
 
                 sub_task = Task(sub_url)
 
-                # 这个地方还需要修改，去除不必要的url
+                # 这个地方还需要修改，去除不必要的url，从route里面找
+                # if not self.spider.r.search(sub_url):
+                #     continue
                 if self.spider.redis.exists(sub_url) and not self.spider.redis.get(sub_url):
                     continue
                 self.spider.redis.lpush('task_queue', pickle.dumps(sub_task))
                 self.spider.redis.set(sub_url, False)
 
             # todo 调用相关的网页处理函数，标记该网页已经被爬过
+            func, args = self.spider.r.get_func(url)
+            if func is None:
+                continue
+            request.add_request(threading.get_ident(), r)
+            func(**args)
 
     def convert(self, href, url):
         parse_result = urlparse(url)
@@ -211,7 +222,9 @@ spider = Spider('http://www.csdn.net/')
 @spider.route('/news/detail/<int:id>')
 def test(id):
     result = request.get_request()
-    print(result)
+    soup = BeautifulSoup(result.text)
+    print(soup.title)
+
 
 if __name__ == '__main__':
     spider.run()
