@@ -43,7 +43,7 @@ class Route(object):
         args = {}
         if type(url) != type(''):
             return None, args
-        urls = urlparse(url).path[1:].split('/')
+        urls = [url for url in urlparse(url).path.split('/') if url != '']
 
         i = 0
         while len(node.sub_node) > 0 and len(urls) > i:
@@ -174,13 +174,15 @@ class Worker(threading.Thread):
             func, args = self.spider.r.get_func(url)
             if func is None:
                 continue
-
             request.add_request(threading.get_ident(), r)
             func(**args)
 
     def convert(self, href, url):
         parse_result = urlparse(url)
         href_result = urlparse(href)
+
+        if parse_result.netloc != href_result.netloc:
+            return None
 
         if href_result.scheme != '':
             return href_result.geturl()
@@ -231,12 +233,11 @@ class Spider(object):
 
 spider = Spider('http://haha.sogou.com')
 
-
 @spider.route('/<int:id>')
 def test(id):
     result = request.get_request()
     soup = BeautifulSoup(result.text)
-    print(id, soup.find_all('h2', class_='browser_title'))
+    print(id, soup.select('h2'))
 
 
 if __name__ == '__main__':
