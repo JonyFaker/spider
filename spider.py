@@ -266,5 +266,6 @@ def test(id):
         f.write('{0} {1} {2} {3}\n'.format(now, id, threading.current_thread().ident, soup.select('h1')))
 
 
+# test main
 if __name__ == '__main__':
     spider.run()
